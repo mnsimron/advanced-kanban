@@ -18,9 +18,6 @@ const pressStart2P = Press_Start_2P({
 export const metadata: Metadata = {
   title: "Super Mario Kanban Board",
   description: "Advanced Kanban Board with Live Timer & Mario Aesthetics",
-  icons: {
-    icon: [{ url: "public/smkb.png", type: "image/png" }],
-  },
 };
 
 export default function RootLayout({
