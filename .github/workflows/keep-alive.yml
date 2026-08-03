@@ -1,0 +1,17 @@
+name: Supabase Keep Alive Heartbeat
+
+on:
+  schedule:
+    # Berjalan otomatis setiap 3 hari sekali (Jam 00:00 UTC)
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Memungkinkan kita memicu skrip ini secara manual lewat web GitHub
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Heartbeat Request to Supabase API
+        run: |
+          curl -i -X GET "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/" \
+          -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}"
