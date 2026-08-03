@@ -45,6 +45,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const savedCode = window.localStorage.getItem('mario_kanban_room_code');
+    if (savedCode) {
+      void setRoomCode(savedCode);
+    }
+  }, [setRoomCode]);
+
+  useEffect(() => {
     if (roomCode) {
       fetchBoardData();
     }
@@ -166,63 +175,80 @@ export default function Home() {
     }
   };
 
+  const handleLeaveRoom = async () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('mario_kanban_room_code');
+    }
+
+    await setRoomCode('');
+  };
+
   if (!roomCode) {
-    return <WelcomeScreen onJoinRoom={(code) => setRoomCode(code)} />;
+    return <WelcomeScreen onJoinRoom={(code) => void setRoomCode(code)} />;
   }
 
   return (
     <main className="min-h-screen w-full px-0 py-4 md:py-8 flex flex-col items-center">
       {/* HEADER BANNER UTAMA */}
-      <header className="w-full max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 bg-mario-brick border-4 border-black p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div>
+      <header className="w-full max-w-6xl mb-4 rounded-none border-4 border-black bg-mario-brick p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-col items-start gap-1">
             <h1 className="font-game text-xl md:text-2xl text-mario-tertiary drop-shadow-[3px_3px_0px_rgba(0,0,0,1)] tracking-wide animate-[pulse_3s_infinite]">
               MARIO KANBAN
             </h1>
-            <div>
-              <p className="font-game text-[9px] text-white mt-1 tracking-wider leading-relaxed">
+            <p className="font-game text-[9px] text-white tracking-wider leading-relaxed">
               TRACK YOUR TASKS LIKE A TRUE MARIO HERO!
-              </p>
-              <p className="font-game text-[9px] text-white mt-1 tracking-wider leading-relaxed">
-                {formattedDate} - {formattedTime}
-              </p>
-            </div>
+            </p>
+            <p className="font-game text-[9px] text-white tracking-wider leading-relaxed">
+              {formattedDate} - {formattedTime}
+            </p>
           </div>
-        </div>
 
-        {/* TOMBOL START / CREATE TASK */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-none border-4 border-black bg-white px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <span className="font-sans text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-              Room Code:
-            </span>
-            <span className="font-game text-[11px] text-slate-800">
-              {roomCode}
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex h-11 items-center gap-2 rounded-none border-4 border-black bg-white px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <span className="font-sans text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                Room Code:
+              </span>
+              <span className="font-game text-[11px] text-slate-800">
+                {roomCode}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyRoomCode}
+                className="flex h-8 w-8 items-center justify-center rounded-none border-2 border-black bg-mario-tertiary text-black transition-all hover:bg-yellow-400 active:translate-x-0.5 active:translate-y-0.5"
+                aria-label="Copy room code"
+              >
+                {copiedRoomCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
             <button
-              type="button"
-              onClick={handleCopyRoomCode}
-              className="rounded-none border-2 border-black bg-mario-tertiary p-1.5 text-black transition-all hover:bg-yellow-400 active:translate-x-0.5 active:translate-y-0.5"
-              aria-label="Copy room code"
+              onClick={handleLeaveRoom}
+              className="h-11 rounded-none border-4 border-black bg-mario-secondary px-4 font-game text-xs text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-red-700 active:translate-x-1 active:translate-y-1 active:shadow-none"
             >
-              {copiedRoomCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              LEAVE ROOM
             </button>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-mario-primary hover:bg-green-600 font-game text-xs text-white border-4 border-black p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" /> CREATE TASK
-          </button>
+        </div>
+      </header>
+
+      <div className="mb-6 flex w-full max-w-6xl items-center justify-end rounded-none border-4 border-black bg-white/80 p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={() => setIsHistoryOpen(true)}
-            className="bg-white hover:bg-orange-400 font-game text-xs text-black border-4 border-black p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:text-white active:translate-x-1 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+            className="h-11 min-w-[140px] rounded-none border-4 border-black bg-white px-4 font-game text-xs text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-orange-400 hover:text-white active:translate-x-1 active:translate-y-1 active:shadow-none"
           >
             History
           </button>
-        </div>
 
-      </header>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="h-11 min-w-[180px] rounded-none border-4 border-black bg-mario-primary px-4 font-game text-xs text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-green-600 active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" /> CREATE TASK
+          </button>
+        </div>
+      </div>
 
       {/* DRAG AND DROP KANBAN CONTEXT BOARD */}
       <DragDropContext onDragEnd={onDragEnd}>

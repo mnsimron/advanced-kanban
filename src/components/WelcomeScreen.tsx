@@ -22,8 +22,19 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
     setGeneratedCode(generateRoomCode());
   }, []);
 
+  const persistRoomCode = (code: string) => {
+    const normalizedCode = code.trim().toUpperCase();
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mario_kanban_room_code', normalizedCode);
+    }
+
+    onJoinRoom(normalizedCode);
+  };
+
   const handleCreateBoard = () => {
-    onJoinRoom(generatedCode);
+    if (!generatedCode) return;
+    persistRoomCode(generatedCode);
   };
 
   const handleCopyCode = async () => {
@@ -42,7 +53,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
     event.preventDefault();
     const trimmedCode = roomCodeInput.trim().toUpperCase();
     if (!trimmedCode) return;
-    onJoinRoom(trimmedCode);
+    persistRoomCode(trimmedCode);
   };
 
   return (
