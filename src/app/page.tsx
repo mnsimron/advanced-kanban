@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useKanbanStore } from '@/store/kanbanStore';
 import TaskCard from '@/components/TaskCard';
-import { Plus, X } from 'lucide-react';
+import WelcomeScreen from '@/components/WelcomeScreen';
+import { Check, Copy, Plus, X } from 'lucide-react';
 
 type SubTaskField = {
   id: string;
@@ -20,7 +21,7 @@ const createSubTaskField = (title = ''): SubTaskField => ({
 });
 
 export default function Home() {
-  const { board, moveTask, addTask, editTaskSubTasks } = useKanbanStore();
+  const { board, roomCode, setRoomCode, fetchBoardData, moveTask, addTask, editTaskSubTasks } = useKanbanStore();
   const history = useKanbanStore((state) => state.board.history || []);
   
   // State untuk mengontrol Modal Pembuatan Task Baru
@@ -33,6 +34,7 @@ export default function Home() {
   const [taskTitle, setTaskTitle] = useState('');
   const [estimatedTime, setEstimatedTime] = useState(30);
   const [subTaskTitles, setSubTaskTitles] = useState<SubTaskField[]>([createSubTaskField()]);
+  const [copiedRoomCode, setCopiedRoomCode] = useState(false);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -41,6 +43,12 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (roomCode) {
+      fetchBoardData();
+    }
+  }, [roomCode, fetchBoardData]);
 
   const formattedDate = currentDate.toLocaleDateString('id-ID', {
     weekday: 'long',
@@ -146,6 +154,22 @@ export default function Home() {
     setEditSubTaskTitles([createSubTaskField()]);
   };
 
+  const handleCopyRoomCode = async () => {
+    if (!roomCode) return;
+
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCopiedRoomCode(true);
+      window.setTimeout(() => setCopiedRoomCode(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy room code', error);
+    }
+  };
+
+  if (!roomCode) {
+    return <WelcomeScreen onJoinRoom={(code) => setRoomCode(code)} />;
+  }
+
   return (
     <main className="min-h-screen w-full px-0 py-4 md:py-8 flex flex-col items-center">
       {/* HEADER BANNER UTAMA */}
@@ -167,7 +191,23 @@ export default function Home() {
         </div>
 
         {/* TOMBOL START / CREATE TASK */}
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-none border-4 border-black bg-white px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <span className="font-sans text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Room Code:
+            </span>
+            <span className="font-game text-[11px] text-slate-800">
+              {roomCode}
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyRoomCode}
+              className="rounded-none border-2 border-black bg-mario-tertiary p-1.5 text-black transition-all hover:bg-yellow-400 active:translate-x-0.5 active:translate-y-0.5"
+              aria-label="Copy room code"
+            >
+              {copiedRoomCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
           <button
             onClick={() => setIsModalOpen(true)}
             className="bg-mario-primary hover:bg-green-600 font-game text-xs text-white border-4 border-black p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
@@ -196,6 +236,11 @@ export default function Home() {
               'in-progress': 'bg-mario-tertiary text-black',
               done: 'bg-mario-primary text-white',
             }[column?.id ?? 'todo'] ?? 'bg-slate-200 text-slate-800';
+            const columnDisplayTitles: Record<string, string> = {
+              todo: 'TO DO',
+              'in-progress': 'IN PROGRESS',
+              done: 'DONE',
+            };
 
             return (
               <Droppable droppableId={column.id} key={column.id}>
@@ -211,7 +256,7 @@ export default function Home() {
                       {/* Plang Atas Judul Kolom */}
                       <div className={`border-4 border-black p-3 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between ${columnHeaderClassName}`}>
                         <h2 className="font-game text-xs md:text-sm tracking-wide truncate pr-2">
-                          {columnTitle}
+                          {columnDisplayTitles[column.id] ?? columnTitle}
                         </h2>
                         <span className="font-game text-xs bg-black text-white px-2 py-0.5 min-w-[24px] text-center border-2 border-white">
                           {tasks.length}

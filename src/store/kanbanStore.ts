@@ -1,21 +1,47 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { BoardState, Task } from '@/types/kanban';
+import { supabase } from '@/utils/supabase';
 
 interface KanbanStore {
   board: BoardState;
-  
+  roomCode: string | null;
+
+  setRoomCode: (code: string) => Promise<void>;
+  fetchBoardData: () => Promise<void>;
+
   // Actions Kanban
-  moveTask: (sourceCol: string, destCol: string, sourceIndex: number, destIndex: number) => void;
-  addTask: (columnId: 'todo' | 'in-progress' | 'done', title: string, estimatedTime: number, subTaskTitles: string[]) => void;
-  editTaskSubTasks: (taskId: string, subTaskTitles: string[]) => void;
-  toggleSubTask: (taskId: string, subTaskId: string) => void;
-  
+  moveTask: (sourceCol: string, destCol: string, sourceIndex: number, destIndex: number) => Promise<void>;
+  addTask: (columnId: 'todo' | 'in-progress' | 'done', title: string, estimatedTime: number, subTaskTitles: string[]) => Promise<void>;
+  editTaskSubTasks: (taskId: string, subTaskTitles: string[]) => Promise<void>;
+  toggleSubTask: (taskId: string, subTaskId: string) => Promise<void>;
+
   // Actions Live Timer
-  startTimer: (taskId: string) => void;
-  pauseTimer: (taskId: string) => void;
-  updateActiveTimers: () => void; // Dipanggil setiap 1 detik oleh setInterval global
-  moveToHistory: (taskId: string) => void;
+  startTimer: (taskId: string) => Promise<void>;
+  pauseTimer: (taskId: string) => Promise<void>;
+  updateActiveTimers: () => void;
+  moveToHistory: (taskId: string) => Promise<void>;
+}
+
+interface SupabaseSubTaskRow {
+  id: string;
+  task_id: string;
+  title: string;
+  is_completed?: boolean | null;
+  created_at?: string | null;
+}
+
+interface SupabaseTaskRowWithSubTasks {
+  id: string;
+  title: string;
+  description?: string | null;
+  status?: string | null;
+  estimated_time?: number | null;
+  total_tracked_time?: number | null;
+  is_timer_running?: boolean | null;
+  timer_started_at?: string | null;
+  created_at?: string | null;
+  room_code?: string | null;
+  sub_tasks?: SupabaseSubTaskRow[] | null;
 }
 
 const COLUMN_IDS = {
@@ -35,281 +61,326 @@ const createInitialBoardState = (): BoardState => ({
   history: []
 });
 
-const normalizeBoardState = (board?: Partial<BoardState> | null): BoardState => {
-  const defaults = createInitialBoardState();
-  const persistedBoard = board ?? {};
+const normalizeTaskStatus = (status?: string | null): Task['status'] => {
+  if (status === 'in-progress' || status === 'done') {
+    return status;
+  }
 
-  return {
-    ...defaults,
-    ...persistedBoard,
-    tasks: persistedBoard.tasks ?? defaults.tasks,
-    columns: {
-      [COLUMN_IDS.todo]: {
-        ...defaults.columns[COLUMN_IDS.todo],
-        ...persistedBoard.columns?.[COLUMN_IDS.todo],
-        id: COLUMN_IDS.todo,
-        title: defaults.columns[COLUMN_IDS.todo].title,
-      },
-      [COLUMN_IDS.inProgress]: {
-        ...defaults.columns[COLUMN_IDS.inProgress],
-        ...persistedBoard.columns?.[COLUMN_IDS.inProgress],
-        id: COLUMN_IDS.inProgress,
-        title: defaults.columns[COLUMN_IDS.inProgress].title,
-      },
-      [COLUMN_IDS.done]: {
-        ...defaults.columns[COLUMN_IDS.done],
-        ...persistedBoard.columns?.[COLUMN_IDS.done],
-        id: COLUMN_IDS.done,
-        title: defaults.columns[COLUMN_IDS.done].title,
-      },
-    },
-    columnOrder: [COLUMN_IDS.todo, COLUMN_IDS.inProgress, COLUMN_IDS.done],
-  };
+  return 'todo';
+};
+
+const createBoardFromSupabaseRows = (
+  taskRows: SupabaseTaskRowWithSubTasks[]
+): BoardState => {
+  const board = createInitialBoardState();
+
+  taskRows.forEach((row) => {
+    const taskId = row.id;
+    const task: Task = {
+      id: taskId,
+      title: row.title ?? '',
+      description: row.description ?? '',
+      status: normalizeTaskStatus(row.status),
+      labels: [],
+      subTasks: (row.sub_tasks ?? []).map((subTask) => ({
+        id: subTask.id,
+        title: subTask.title,
+        isCompleted: Boolean(subTask.is_completed),
+      })),
+      estimatedTime: Number(row.estimated_time ?? 0),
+      totalTrackedTime: Number(row.total_tracked_time ?? 0),
+      isTimerRunning: Boolean(row.is_timer_running),
+      timerStartedAt: row.timer_started_at ?? null,
+      createdAt: row.created_at ?? new Date().toISOString(),
+    };
+
+    board.tasks[taskId] = task;
+    board.columns[task.status].taskIds.push(task.id);
+  });
+
+  return board;
 };
 
 const initialBoardState = createInitialBoardState();
 
-export const useKanbanStore = create<KanbanStore>()(
-  persist(
-    (set, get) => ({
-      board: initialBoardState,
+export const useKanbanStore = create<KanbanStore>()((set, get) => ({
+  board: initialBoardState,
+  roomCode: null,
 
-      // Logika Drag-and-Drop Kartu
-      moveTask: (sourceCol, destCol, sourceIndex, destIndex) => {
-        set((state) => {
-          const newColumns = { ...state.board.columns };
-          const startCol = newColumns[sourceCol];
-          const finishCol = newColumns[destCol];
+  setRoomCode: async (code) => {
+    const normalizedCode = code.trim();
+    set({ roomCode: normalizedCode || null });
 
-          if (!startCol || !finishCol || !Array.isArray(startCol.taskIds) || !Array.isArray(finishCol.taskIds)) {
-            return {};
-          }
-
-          // 1. Perpindahan di kolom yang sama
-          if (startCol === finishCol) {
-            const newTaskIds = Array.from(startCol.taskIds);
-            const [movedTaskId] = newTaskIds.splice(sourceIndex, 1);
-            newTaskIds.splice(destIndex, 0, movedTaskId);
-
-            newColumns[sourceCol] = { ...startCol, taskIds: newTaskIds };
-            return { board: { ...state.board, columns: newColumns } };
-          }
-
-          // 2. Perpindahan antar kolom berbeda
-          const startTaskIds = Array.from(startCol.taskIds);
-          const [movedTaskId] = startTaskIds.splice(sourceIndex, 1);
-          const finishTaskIds = Array.from(finishCol.taskIds);
-          finishTaskIds.splice(destIndex, 0, movedTaskId);
-
-          newColumns[sourceCol] = { ...startCol, taskIds: startTaskIds };
-          newColumns[destCol] = { ...finishCol, taskIds: finishTaskIds };
-
-          // Otomatis update status property di dalam objek Task-nya
-          const updatedTasks = { ...state.board.tasks };
-          updatedTasks[movedTaskId] = { 
-            ...updatedTasks[movedTaskId], 
-            status: destCol as 'todo' | 'in-progress' | 'done' 
-          };
-
-          return { board: { ...state.board, tasks: updatedTasks, columns: newColumns } };
-        });
-      },
-
-      // Tambah Kartu Baru
-      addTask: (columnId, title, estimatedTime, subTaskTitles) => {
-        const id = `task-${Date.now()}`;
-        const trimmedSubTaskTitles = (subTaskTitles ?? [])
-          .map((subTaskTitle) => subTaskTitle.trim())
-          .filter((subTaskTitle) => subTaskTitle.length > 0);
-
-        const cleanedSubTasks = trimmedSubTaskTitles.map((subTaskTitle, index) => ({
-          id: `sub-${Date.now()}-${index}`,
-          title: subTaskTitle,
-          isCompleted: false,
-        }));
-
-        const newTask: Task = {
-          id,
-          title,
-          description: '',
-          status: columnId,
-          labels: [],
-          subTasks: cleanedSubTasks,
-          estimatedTime,
-          totalTrackedTime: 0,
-          isTimerRunning: false,
-          timerStartedAt: null,
-          createdAt: new Date().toISOString()
-        };
-
-        set((state) => ({
-          board: {
-            ...state.board,
-            tasks: { ...state.board.tasks, [id]: newTask },
-            columns: {
-              ...state.board.columns,
-              [columnId]: {
-                ...state.board.columns[columnId],
-                taskIds: [...state.board.columns[columnId].taskIds, id]
-              }
-            }
-          }
-        }));
-      },
-
-      editTaskSubTasks: (taskId, subTaskTitles) => {
-        set((state) => {
-          const task = state.board.tasks[taskId];
-          if (!task || task.status !== 'todo') return {};
-
-          const trimmedSubTaskTitles = (subTaskTitles ?? [])
-            .map((subTaskTitle) => subTaskTitle.trim())
-            .filter((subTaskTitle) => subTaskTitle.length > 0);
-
-          const updatedSubTasks = trimmedSubTaskTitles.map((subTaskTitle, index) => ({
-            id: `sub-${Date.now()}-${index}`,
-            title: subTaskTitle,
-            isCompleted: false,
-          }));
-
-          const updatedTasks = { ...state.board.tasks };
-          updatedTasks[taskId] = { ...task, subTasks: updatedSubTasks };
-
-          return { board: { ...state.board, tasks: updatedTasks } };
-        });
-      },
-
-      // Ceklis Sub-task
-      toggleSubTask: (taskId, subTaskId) => {
-        set((state) => {
-          const updatedTasks = { ...state.board.tasks };
-          const task = updatedTasks[taskId];
-          if (!task) return {};
-
-          const updatedSubTasks = task.subTasks.map(sub => 
-            sub.id === subTaskId ? { ...sub, isCompleted: !sub.isCompleted } : sub
-          );
-
-          updatedTasks[taskId] = { ...task, subTasks: updatedSubTasks };
-          return { board: { ...state.board, tasks: updatedTasks } };
-        });
-      },
-
-      // TIMER ACTIONS: Mulai menghitung waktu
-      startTimer: (taskId) => {
-        set((state) => {
-          const updatedTasks = { ...state.board.tasks };
-          const task = updatedTasks[taskId];
-
-          if (task && !task.isTimerRunning) {
-            task.isTimerRunning = true;
-            task.timerStartedAt = new Date().toISOString();
-          }
-
-          return { board: { ...state.board, tasks: updatedTasks } };
-        });
-      },
-
-      // TIMER ACTIONS: Jeda hitungan waktu
-      pauseTimer: (taskId) => {
-        set((state) => {
-          const updatedTasks = { ...state.board.tasks };
-          const task = updatedTasks[taskId];
-
-          if (task && task.isTimerRunning && task.timerStartedAt) {
-            const elapsedSeconds = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
-            task.totalTrackedTime += elapsedSeconds;
-            task.isTimerRunning = false;
-            task.timerStartedAt = null;
-          }
-
-          return { board: { ...state.board, tasks: updatedTasks } };
-        });
-      },
-
-      // TIMER ACTIONS: Fungsi pembaruan visual real-time
-      updateActiveTimers: () => {
-        set((state) => {
-          const updatedTasks = { ...state.board.tasks };
-          let hasUpdates = false;
-
-          Object.keys(updatedTasks).forEach((id) => {
-            const task = updatedTasks[id];
-            const startedAt = task.timerStartedAt ? new Date(task.timerStartedAt) : null;
-            const isValidStartedAt = startedAt instanceof Date && !isNaN(startedAt.getTime());
-
-            if (task.isTimerRunning && task.timerStartedAt && !isValidStartedAt) {
-              task.isTimerRunning = false;
-              task.timerStartedAt = null;
-              updatedTasks[id] = { ...task };
-              hasUpdates = true;
-              return;
-            }
-
-            // Jika timer running, kita trigger re-render dengan update tipis agar UI tahu waktu berjalan
-            if (task.isTimerRunning && task.timerStartedAt && isValidStartedAt) {
-              updatedTasks[id] = { ...task }; 
-              hasUpdates = true;
-            }
-          });
-
-          return hasUpdates ? { board: { ...state.board, tasks: updatedTasks } } : {};
-        });
-      },
-
-      moveToHistory: (taskId) => {
-        set((state) => {
-          const task = state.board.tasks[taskId];
-          if (!task) return {};
-
-          const remainingTasks = Object.fromEntries(
-            Object.entries(state.board.tasks).filter(([id]) => id !== taskId)
-          );
-
-          const updatedColumns = { ...state.board.columns };
-          Object.values(updatedColumns).forEach((column) => {
-            updatedColumns[column.id] = {
-              ...column,
-              taskIds: column.taskIds.filter((id) => id !== taskId),
-            };
-          });
-
-          return {
-            board: {
-              ...state.board,
-              tasks: remainingTasks,
-              columns: updatedColumns,
-              history: [...(state.board.history ?? []), task],
-            },
-          };
-        });
-      }
-    }),
-    {
-      name: 'mario-kanban-storage',
-      version: 2,
-      merge: (persistedState, currentState) => {
-        const mergedState = {
-          ...(currentState as unknown as Record<string, unknown>),
-          ...(persistedState as unknown as Record<string, unknown>),
-        };
-
-        if (mergedState.board) {
-          mergedState.board = normalizeBoardState(mergedState.board as Partial<BoardState>);
-        }
-
-        return mergedState as unknown as typeof currentState;
-      },
-      migrate: (persistedState, version) => {
-        if (version < 2) {
-          return {
-            board: normalizeBoardState((persistedState as { board?: Partial<BoardState> } | undefined)?.board),
-          };
-        }
-
-        return persistedState as typeof persistedState;
-      },
-      partialize: (state) => ({ board: state.board }),
+    if (normalizedCode) {
+      await get().fetchBoardData();
+    } else {
+      set({ board: createInitialBoardState() });
     }
-  )
-);
+  },
+
+  fetchBoardData: async () => {
+    const roomCode = get().roomCode;
+
+    if (!roomCode || !supabase) {
+      set({ board: createInitialBoardState() });
+      return;
+    }
+
+    set({ board: createInitialBoardState() });
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        sub_tasks (*)
+      `)
+      .eq('room_code', roomCode)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Failed to fetch Supabase board data', error);
+      return;
+    }
+
+    const board = createBoardFromSupabaseRows((data as SupabaseTaskRowWithSubTasks[]) ?? []);
+
+    set({ board });
+  },
+
+  moveTask: async (sourceCol, destCol, sourceIndex, destIndex) => {
+    const roomCode = get().roomCode;
+    const movedTaskId = get().board.columns[sourceCol]?.taskIds?.[sourceIndex];
+
+    if (!roomCode || !movedTaskId || !supabase) {
+      return;
+    }
+
+    const status = destCol as Task['status'];
+    await supabase.from('tasks').update({ status }).eq('id', movedTaskId);
+    await get().fetchBoardData();
+  },
+
+  addTask: async (columnId, title, estimatedTime, subTaskTitles) => {
+    const roomCode = get().roomCode;
+
+    if (!roomCode || !supabase) {
+      return;
+    }
+
+    const trimmedSubTaskTitles = (subTaskTitles ?? [])
+      .map((subTaskTitle) => subTaskTitle.trim())
+      .filter((subTaskTitle) => subTaskTitle.length > 0);
+
+    const cleanedSubTasks = trimmedSubTaskTitles.map((subTaskTitle, index) => ({
+      id: `sub-${Date.now()}-${index}`,
+      title: subTaskTitle,
+      isCompleted: false,
+    }));
+
+    const newTaskPayload = {
+      room_code: roomCode,
+      title,
+      description: '',
+      status: columnId,
+      estimated_time: estimatedTime,
+      total_tracked_time: 0,
+      is_timer_running: false,
+      timer_started_at: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data: insertedTask, error: taskError } = await supabase
+      .from('tasks')
+      .insert([{ ...newTaskPayload }])
+      .select()
+      .single();
+
+    if (taskError || !insertedTask) {
+      console.error('Supabase Task Insert Error:', taskError);
+      return;
+    }
+
+    if (cleanedSubTasks.length > 0) {
+      const subTaskPayload = cleanedSubTasks.map((subTask) => ({
+        task_id: insertedTask.id,
+        title: subTask.title,
+        is_completed: false,
+        created_at: new Date().toISOString(),
+      }));
+
+      const { error: subTaskError } = await supabase.from('sub_tasks').insert(subTaskPayload);
+
+      if (subTaskError) {
+        console.error('Supabase Sub-Task Insert Error:', subTaskError);
+      }
+    }
+
+    await get().fetchBoardData();
+  },
+
+  editTaskSubTasks: async (taskId, subTaskTitles) => {
+    const roomCode = get().roomCode;
+    const task = get().board.tasks[taskId];
+
+    if (!roomCode || !task || task.status !== 'todo' || !supabase) {
+      return;
+    }
+
+    const trimmedSubTaskTitles = (subTaskTitles ?? [])
+      .map((subTaskTitle) => subTaskTitle.trim())
+      .filter((subTaskTitle) => subTaskTitle.length > 0);
+
+    const { error: deleteError } = await supabase.from('sub_tasks').delete().eq('task_id', taskId);
+    if (deleteError) {
+      console.error('Failed to replace sub-tasks in Supabase', deleteError);
+      return;
+    }
+
+    if (trimmedSubTaskTitles.length > 0) {
+      const subTaskPayload = trimmedSubTaskTitles.map((subTaskTitle, index) => ({
+        id: `sub-${Date.now()}-${index}`,
+        task_id: taskId,
+        title: subTaskTitle,
+        is_completed: false,
+        created_at: new Date().toISOString(),
+      }));
+
+      const { error: insertError } = await supabase.from('sub_tasks').insert(subTaskPayload);
+      if (insertError) {
+        console.error('Failed to insert updated sub-tasks in Supabase', insertError);
+        return;
+      }
+    }
+
+    await get().fetchBoardData();
+  },
+
+  toggleSubTask: async (taskId, subTaskId) => {
+    const roomCode = get().roomCode;
+    const task = get().board.tasks[taskId];
+    const subTask = task?.subTasks.find((item) => item.id === subTaskId);
+
+    if (!roomCode || !subTask || !supabase) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('sub_tasks')
+      .update({ is_completed: !subTask.isCompleted })
+      .eq('id', subTaskId);
+
+    if (error) {
+      console.error('Failed to toggle sub-task in Supabase', error);
+      return;
+    }
+
+    await get().fetchBoardData();
+  },
+
+  startTimer: async (taskId) => {
+    const roomCode = get().roomCode;
+
+    if (!roomCode || !supabase) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('tasks')
+      .update({ is_timer_running: true, timer_started_at: new Date().toISOString() })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Failed to start timer in Supabase', error);
+      return;
+    }
+
+    await get().fetchBoardData();
+  },
+
+  pauseTimer: async (taskId) => {
+    const roomCode = get().roomCode;
+    const task = get().board.tasks[taskId];
+
+    if (!roomCode || !task || !supabase) {
+      return;
+    }
+
+    let elapsedSeconds = 0;
+    if (task.isTimerRunning && task.timerStartedAt) {
+      elapsedSeconds = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+    }
+
+    const nextTrackedTime = task.totalTrackedTime + elapsedSeconds;
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        total_tracked_time: nextTrackedTime,
+        is_timer_running: false,
+        timer_started_at: null,
+      })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Failed to pause timer in Supabase', error);
+      return;
+    }
+
+    await get().fetchBoardData();
+  },
+
+  updateActiveTimers: () => {
+    set((state) => {
+      const updatedTasks = { ...state.board.tasks };
+      let hasUpdates = false;
+
+      Object.keys(updatedTasks).forEach((id) => {
+        const task = updatedTasks[id];
+        const startedAt = task.timerStartedAt ? new Date(task.timerStartedAt) : null;
+        const isValidStartedAt = startedAt instanceof Date && !isNaN(startedAt.getTime());
+
+        if (task.isTimerRunning && task.timerStartedAt && !isValidStartedAt) {
+          task.isTimerRunning = false;
+          task.timerStartedAt = null;
+          updatedTasks[id] = { ...task };
+          hasUpdates = true;
+          return;
+        }
+
+        if (task.isTimerRunning && task.timerStartedAt && isValidStartedAt) {
+          updatedTasks[id] = { ...task };
+          hasUpdates = true;
+        }
+      });
+
+      return hasUpdates ? { board: { ...state.board, tasks: updatedTasks } } : {};
+    });
+  },
+
+  moveToHistory: async (taskId) => {
+    set((state) => {
+      const task = state.board.tasks[taskId];
+      if (!task) return {};
+
+      const remainingTasks = Object.fromEntries(
+        Object.entries(state.board.tasks).filter(([id]) => id !== taskId)
+      );
+
+      const updatedColumns = { ...state.board.columns };
+      Object.values(updatedColumns).forEach((column) => {
+        updatedColumns[column.id] = {
+          ...column,
+          taskIds: column.taskIds.filter((id) => id !== taskId),
+        };
+      });
+
+      return {
+        board: {
+          ...state.board,
+          tasks: remainingTasks,
+          columns: updatedColumns,
+          history: [...(state.board.history ?? []), task],
+        },
+      };
+    });
+  },
+}));
