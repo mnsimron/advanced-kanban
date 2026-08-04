@@ -55,7 +55,7 @@ export default function Home() {
 
   useEffect(() => {
     if (roomCode) {
-      fetchBoardData();
+      void fetchBoardData();
     }
   }, [roomCode, fetchBoardData]);
 
@@ -175,6 +175,16 @@ export default function Home() {
     }
   };
 
+  const handleJoinRoom = async (code: string) => {
+    const normalizedCode = code.trim().toUpperCase();
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mario_kanban_room_code', normalizedCode);
+    }
+
+    await setRoomCode(normalizedCode);
+  };
+
   const handleLeaveRoom = async () => {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('mario_kanban_room_code');
@@ -184,7 +194,7 @@ export default function Home() {
   };
 
   if (!roomCode) {
-    return <WelcomeScreen onJoinRoom={(code) => void setRoomCode(code)} />;
+    return <WelcomeScreen onJoinRoom={handleJoinRoom} />;
   }
 
   return (

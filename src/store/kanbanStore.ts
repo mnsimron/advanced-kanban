@@ -108,11 +108,11 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
   roomCode: null,
 
   setRoomCode: async (code) => {
-    const normalizedCode = code.trim();
+    const normalizedCode = (code ?? '').trim();
     set({ roomCode: normalizedCode || null });
 
     if (normalizedCode) {
-      await get().fetchBoardData();
+      void get().fetchBoardData();
     } else {
       set({ board: createInitialBoardState() });
     }
@@ -160,61 +160,59 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
     await get().fetchBoardData();
   },
 
-  addTask: async (columnId, title, estimatedTime, subTaskTitles) => {
-    const roomCode = get().roomCode;
+  addTask: async (columnId, title, estimatedTime, subTaskTitles = []) => {
+    const currentRoomCode = get().roomCode;
 
-    if (!roomCode || !supabase) {
+    if (!currentRoomCode) {
+      console.error('❌ Blocked addTask: roomCode is empty, null, or undefined in Zustand state!');
       return;
     }
 
-    const trimmedSubTaskTitles = (subTaskTitles ?? [])
-      .map((subTaskTitle) => subTaskTitle.trim())
-      .filter((subTaskTitle) => subTaskTitle.length > 0);
+    if (!supabase) {
+      console.error('❌ Blocked addTask: Supabase client is unavailable.');
+      return;
+    }
 
-    const cleanedSubTasks = trimmedSubTaskTitles.map((subTaskTitle, index) => ({
-      id: `sub-${Date.now()}-${index}`,
-      title: subTaskTitle,
-      isCompleted: false,
-    }));
+    console.log('🚀 Attempting to insert task for room:', currentRoomCode);
 
-    const newTaskPayload = {
-      room_code: roomCode,
-      title,
-      description: '',
-      status: columnId,
-      estimated_time: estimatedTime,
-      total_tracked_time: 0,
-      is_timer_running: false,
-      timer_started_at: null,
-      created_at: new Date().toISOString(),
-    };
-
-    const { data: insertedTask, error: taskError } = await supabase
+    const { data: taskData, error: taskError } = await supabase
       .from('tasks')
-      .insert([{ ...newTaskPayload }])
+      .insert([{
+        title: title,
+        status: columnId || 'todo',
+        estimated_time: Number(estimatedTime),
+        room_code: currentRoomCode,
+        total_tracked_time: 0,
+        is_timer_running: false,
+        is_archived: false
+      }])
       .select()
       .single();
 
-    if (taskError || !insertedTask) {
-      console.error('Supabase Task Insert Error:', taskError);
+    if (taskError) {
+      console.error('❌ CRITICAL: Supabase tasks insert failed:', taskError);
       return;
     }
 
-    if (cleanedSubTasks.length > 0) {
-      const subTaskPayload = cleanedSubTasks.map((subTask) => ({
-        task_id: insertedTask.id,
-        title: subTask.title,
-        is_completed: false,
-        created_at: new Date().toISOString(),
+    if (subTaskTitles && subTaskTitles.length > 0 && taskData) {
+      console.log(`📝 Inserting ${subTaskTitles.length} sub-tasks for Task UUID:`, taskData.id);
+
+      const subTaskPayload = subTaskTitles.map((subTitle) => ({
+        task_id: taskData.id,
+        title: subTitle,
+        is_completed: false
       }));
 
-      const { error: subTaskError } = await supabase.from('sub_tasks').insert(subTaskPayload);
+      const { error: subTaskError } = await supabase
+        .from('sub_tasks')
+        .insert(subTaskPayload);
 
       if (subTaskError) {
-        console.error('Supabase Sub-Task Insert Error:', subTaskError);
+        console.error('❌ CRITICAL: Supabase sub_tasks insert failed:', subTaskError);
       }
     }
 
+    console.log('🔄 Database synced successfully! Pushing automatic board reload...');
     await get().fetchBoardData();
   },
 
