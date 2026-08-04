@@ -198,19 +198,45 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen w-full px-0 py-4 md:py-8 flex flex-col items-center">
-      {/* HEADER BANNER UTAMA */}
-      <header className="w-full max-w-6xl mb-4 rounded-none border-4 border-black bg-mario-brick p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+    <main className="relative min-h-screen w-full overflow-x-hidden bg-mario-sky px-0 pb-16 pt-4 md:py-8">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute left-0 top-12 animate-cloud-fast opacity-90">
+          <img src="/awan-1.png" alt="Cloud" className="h-40 w-64 object-contain" />
+        </div>
+
+        <div className="absolute left-0 top-28 animate-cloud-medium opacity-80">
+          <img src="/awan-2.png" alt="Cloud" className="h-30 w-54 object-contain" />
+        </div>
+
+        <div className="absolute left-0 top-40 animate-cloud-slow opacity-75">
+          <img src="/awan-1.png" alt="Cloud" className="h-40 w-64 object-contain" />
+        </div>
+
+        <div className="absolute bottom-16 left-0 right-0 h-48 pointer-events-none">
+          <div className="absolute bottom-0 left-[-10%] h-32 w-[70%] rounded-t-[140px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+          <div className="absolute bottom-0 left-[25%] h-28 w-[50%] rounded-t-[140px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+          <div className="absolute bottom-0 right-[-8%] h-40 w-[60%] rounded-t-[140px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 h-16 border-t-4 border-black bg-mario-brick pointer-events-none">
+          <div className="absolute inset-0 opacity-80">
+            {Array.from({ length: 18 }).map((_, index) => (
+              <div key={index} className="absolute top-0 h-full w-4 border-r-4 border-black" style={{ left: `${index * 6}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative z-10 flex flex-col items-center">
+        {/* HEADER BANNER UTAMA */}
+        <header className="w-full max-w-6xl mb-4 rounded-none border-4 border-black bg-mario-brick p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex flex-col items-start gap-1">
+          <div className="flex flex-col items-start gap-2">
             <h1 className="font-game text-xl md:text-2xl text-mario-tertiary drop-shadow-[3px_3px_0px_rgba(0,0,0,1)] tracking-wide animate-[pulse_3s_infinite]">
               MARIO KANBAN
             </h1>
             <p className="font-game text-[9px] text-white tracking-wider leading-relaxed">
               TRACK YOUR TASKS LIKE A TRUE MARIO HERO!
-            </p>
-            <p className="font-game text-[9px] text-white tracking-wider leading-relaxed">
-              {formattedDate} - {formattedTime}
             </p>
           </div>
 
@@ -242,7 +268,15 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mb-6 flex w-full max-w-6xl items-center justify-end rounded-none border-4 border-black bg-white/80 p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <div className="mb-6 flex w-full max-w-6xl items-center justify-between rounded-none border-4 border-black bg-white/80 p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="rounded-none border-4 border-black bg-white/90 px-3 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <p className="font-game text-[10px] text-slate-800 mt-1">
+                {formattedDate}
+              </p>
+              <p className="font-game text-[11px] text-mario-secondary mt-1 tracking-[0.2em]">
+                {formattedTime.replace(/\./g, ':')}
+              </p>
+            </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={() => setIsHistoryOpen(true)}
@@ -332,6 +366,7 @@ export default function Home() {
           })}
         </div>
       </DragDropContext>
+      </div>
 
       {/* POP-UP MODAL BOX ALA GAME OVER / ITEM SELECTION SCREEN */}
       {isHistoryOpen && (

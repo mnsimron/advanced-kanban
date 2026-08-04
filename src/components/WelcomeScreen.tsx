@@ -58,15 +58,50 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
   };
 
   return (
-    <main className="min-h-screen w-full bg-mario-sky flex items-center justify-center px-4 py-8">
-      <section className="w-full max-w-2xl rounded-none border-4 border-black bg-white/90 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 md:p-10">
-        <div className="border-4 border-black bg-mario-brick p-4 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <h1 className="font-game text-xl md:text-2xl text-white tracking-[0.2em]">
+    <main className="relative h-screen w-full overflow-hidden bg-mario-sky px-4 py-50">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute left-0 top-6 animate-cloud-fast opacity-90">
+          <img src="./awan-1.png" alt="Cloud" className="h-40 w-64 object-contain" />
+        </div>
+
+        <div className="absolute left-0 top-16 animate-cloud-medium opacity-80">
+          <img src="./awan-2.png" alt="Cloud" className="h-30 w-54 object-contain" />
+        </div>
+
+        <div className="absolute left-0 top-28 animate-cloud-slow opacity-75">
+          <img src="./awan-1.png" alt="Cloud" className="h-40 w-64 object-contain" />
+        </div>
+
+        <div className="absolute bottom-16 left-0 right-0 h-40 pointer-events-none">
+          <div className="absolute bottom-0 left-[-10%] h-28 w-[70%] rounded-t-[120px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+          <div className="absolute bottom-0 left-[28%] h-24 w-[45%] rounded-t-[120px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+          <div className="absolute bottom-0 right-[-8%] h-32 w-[60%] rounded-t-[120px] border-t-4 border-black bg-mario-primary shadow-[0_-6px_0_0_rgba(0,0,0,0.2)]" />
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 h-16 border-t-4 border-black bg-mario-brick">
+          <div className="absolute inset-0 opacity-80">
+            {Array.from({ length: 18 }).map((_, index) => (
+              <div key={index} className="absolute top-0 h-full w-4 border-r-4 border-black" style={{ left: `${index * 6}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <section className="relative z-10 mx-auto w-full max-w-2xl rounded-none border-4 border-black bg-white/90 p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] md:p-10">
+        <div className="absolute right-1 top-0 z-20 hidden sm:block">
+          <img
+            src="/blok-why.png"
+            alt="Decorative block"
+            className="h-22 w-22 object-contain animate-flip-front-back drop-shadow-[3px_3px_0px_rgba(0,0,0,1)] md:h-24 md:w-24"
+          />
+        </div>
+        <div className="rounded-none border-4 border-black bg-mario-brick p-5 text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+          <h1 className="font-game text-lg md:text-2xl text-white tracking-[0.2em] drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">
             MARIO KANBAN BOARD
           </h1>
         </div>
 
-        <div className="mt-6 flex flex-col gap-4">
+        <div className="mt-8 flex flex-col gap-4">
           {activeMenu === 'none' && (
             <div className="flex flex-col gap-4">
               <button

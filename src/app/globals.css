@@ -56,3 +56,41 @@ html {
 .animate-slideInRight {
   animation: slideInRight 0.3s ease-out forwards;
 }
+
+@keyframes floatCloud {
+  0% {
+    transform: translateX(110vw);
+  }
+  100% {
+    transform: translateX(-20vw);
+  }
+}
+
+@keyframes flipFrontBack {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+.animate-cloud-fast {
+  animation: floatCloud 30s linear infinite;
+}
+
+.animate-cloud-medium {
+  animation: floatCloud 45s linear infinite;
+}
+
+.animate-cloud-slow {
+  animation: floatCloud 60s linear infinite;
+}
+
+.animate-flip-front-back {
+  animation: flipFrontBack 5.2s linear infinite;
+  transform-style: preserve-3d;
+}
