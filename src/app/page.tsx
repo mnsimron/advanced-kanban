@@ -35,6 +35,7 @@ export default function Home() {
   const [estimatedTime, setEstimatedTime] = useState(30);
   const [subTaskTitles, setSubTaskTitles] = useState<SubTaskField[]>([createSubTaskField()]);
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
+  const [expandedHistoryTaskIds, setExpandedHistoryTaskIds] = useState<string[]>([]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -191,6 +192,54 @@ export default function Home() {
     }
 
     await setRoomCode('');
+  };
+
+  const toggleHistoryTask = (taskId: string) => {
+    setExpandedHistoryTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const formatHistoryTimestamp = (value: string | null | undefined) => {
+    if (!value) return '—';
+
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '—';
+    }
+
+    return parsedDate.toLocaleString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  };
+
+  const getDisplayTime = (task: { totalTrackedTime: number; isTimerRunning: boolean; timerStartedAt: string | null }) => {
+    const parsedTrackedTime = Number.isFinite(task.totalTrackedTime) ? task.totalTrackedTime : 0;
+    const safeTrackedTime = Math.max(0, parsedTrackedTime);
+
+    let seconds = safeTrackedTime;
+    if (task.isTimerRunning && task.timerStartedAt) {
+      const startedAt = new Date(task.timerStartedAt);
+      const isValidStartedAt = startedAt instanceof Date && !isNaN(startedAt.getTime());
+
+      if (isValidStartedAt) {
+        const elapsed = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+        seconds += Number.isFinite(elapsed) ? elapsed : 0;
+      }
+    }
+
+    const safeSeconds = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+    const h = Math.floor(safeSeconds / 3600);
+    const m = Math.floor((safeSeconds % 3600) / 60);
+    const s = safeSeconds % 60;
+
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   if (!roomCode) {
@@ -392,25 +441,69 @@ export default function Home() {
                 </div>
               ) : (
                 history.map((task) => {
-                  const h = Math.floor(task.totalTrackedTime / 3600);
-                  const m = Math.floor((task.totalTrackedTime % 3600) / 60);
-                  const s = task.totalTrackedTime % 60;
-                  const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                  const isExpanded = expandedHistoryTaskIds.includes(task.id);
+                  const timeString = getDisplayTime(task);
 
                   return (
                     <div
                       key={task.id}
                       className="bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[9px] font-game bg-mario-primary text-white px-1.5 py-0.5 border border-black">
-                          CLEAR
-                        </span>
-                        <h4 className="font-bold text-slate-800 line-clamp-1">{task.title}</h4>
-                      </div>
-                      <p className="text-xs text-slate-400 font-game text-[9px] mt-2">
-                        TIME SPENT: <span className="text-mario-secondary">{timeString}</span> / {task.estimatedTime}M
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() => toggleHistoryTask(task.id)}
+                        className="flex w-full items-start justify-between gap-3 text-left"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[9px] font-game bg-mario-primary text-white px-1.5 py-0.5 border border-black">
+                              CLEAR
+                            </span>
+                            <h4 className="font-bold text-slate-800 line-clamp-1">{task.title}</h4>
+                          </div>
+                          <p className="text-xs text-slate-400 font-game text-[9px] mt-2">
+                            TIME SPENT: <span className="text-mario-secondary">{timeString}</span> / {task.estimatedTime}M
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-game text-slate-600">{isExpanded ? '−' : '+'}</span>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-4 space-y-3 border-t-2 border-dashed border-slate-200 pt-3">
+                          <div className="rounded-none border-2 border-black bg-slate-50 p-3">
+                            <p className="text-[10px] font-game uppercase tracking-wide text-slate-600">Created</p>
+                            <p className="text-sm text-slate-800">{formatHistoryTimestamp(task.createdAt)}</p>
+                          </div>
+                          <div className="rounded-none border-2 border-black bg-slate-50 p-3">
+                            <p className="text-[10px] font-game uppercase tracking-wide text-slate-600">Completed</p>
+                            <p className="text-sm text-slate-800">{formatHistoryTimestamp(task.archivedAt)}</p>
+                          </div>
+                          <div className="rounded-none border-2 border-black bg-slate-50 p-3">
+                            <p className="text-[10px] font-game uppercase tracking-wide text-slate-600">Productivity Time</p>
+                            <p className="text-sm font-semibold text-mario-secondary">{timeString}</p>
+                          </div>
+                          <div className="rounded-none border-2 border-black bg-slate-50 p-3">
+                            <p className="text-[10px] font-game uppercase tracking-wide text-slate-600">Sub-tasks</p>
+                            <div className="mt-2 space-y-1">
+                              {task.subTasks.length > 0 ? (
+                                task.subTasks.map((subTask) => (
+                                  <div key={subTask.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={subTask.isCompleted}
+                                      readOnly
+                                      className="h-3.5 w-3.5 border-2 border-black accent-mario-primary"
+                                    />
+                                    <span className={subTask.isCompleted ? 'line-through text-slate-400' : ''}>{subTask.title}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-sm text-slate-500">No sub-tasks recorded.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })

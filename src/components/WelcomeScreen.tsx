@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { supabase } from '@/utils/supabase';
 
 interface WelcomeScreenProps {
   onJoinRoom: (code: string) => void;
@@ -18,6 +19,8 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
   const [generatedCode, setGeneratedCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [activeMenu, setActiveMenu] = useState<'none' | 'create' | 'join'>('none');
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [isCheckingRoom, setIsCheckingRoom] = useState(false);
 
   useEffect(() => {
     setGeneratedCode(generateRoomCode());
@@ -25,6 +28,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
 
   const persistRoomCode = (code: string) => {
     const normalizedCode = code.trim().toUpperCase();
+    setValidationMessage(null);
 
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('mario_kanban_room_code', normalizedCode);
@@ -50,11 +54,47 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmedCode = roomCodeInput.trim().toUpperCase();
-    if (!trimmedCode) return;
-    persistRoomCode(trimmedCode);
+
+    if (!trimmedCode) {
+      setValidationMessage('Please enter a room code first.');
+      return;
+    }
+
+    setIsCheckingRoom(true);
+    setValidationMessage(null);
+
+    if (!supabase) {
+      setValidationMessage('Supabase is not configured right now. Please create a new kanban board instead.');
+      setIsCheckingRoom(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('room_code', trimmedCode)
+        .limit(1);
+
+      if (error) {
+        throw error;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        persistRoomCode(trimmedCode);
+        return;
+      }
+
+      setValidationMessage('Room code not found. Please check your room code or create a new kanban.');
+    } catch (error) {
+      console.error('Failed to validate room code:', error);
+      setValidationMessage('Room code not found. Please check your room code or create a new kanban.');
+    } finally {
+      setIsCheckingRoom(false);
+    }
   };
 
   return (
@@ -172,11 +212,17 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                     placeholder="Enter Room Code"
                     className="w-full rounded-none border-4 border-black bg-slate-50 px-3 py-3 font-sans text-sm text-slate-800 outline-none"
                   />
+                  {validationMessage && (
+                    <div className="rounded-none border-4 border-black bg-red-100 px-3 py-3 text-sm text-red-700">
+                      {validationMessage}
+                    </div>
+                  )}
                   <button
                     type="submit"
-                    className="rounded-none border-4 border-black bg-mario-tertiary px-4 py-3 font-game text-sm text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-yellow-400 active:translate-x-1 active:translate-y-1 active:shadow-none"
+                    disabled={isCheckingRoom}
+                    className="rounded-none border-4 border-black bg-mario-tertiary px-4 py-3 font-game text-sm text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-yellow-400 active:translate-x-1 active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    JOIN BOARD
+                    {isCheckingRoom ? 'CHECKING...' : 'JOIN BOARD'}
                   </button>
                 </form>
               )}

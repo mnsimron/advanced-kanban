@@ -23,6 +23,8 @@ export interface Task {
   totalTrackedTime: number; // Akumulasi waktu pengerjaan dalam satuan detik
   isTimerRunning: boolean;
   timerStartedAt: string | null; // ISO String waktu saat tombol Play ditekan
+  isArchived: boolean;
+  archivedAt: string | null;
   
   createdAt: string;
 }

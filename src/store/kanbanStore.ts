@@ -39,6 +39,8 @@ interface SupabaseTaskRowWithSubTasks {
   total_tracked_time?: number | null;
   is_timer_running?: boolean | null;
   timer_started_at?: string | null;
+  is_archived?: boolean | null;
+  archived_at?: string | null;
   created_at?: string | null;
   room_code?: string | null;
   sub_tasks?: SupabaseSubTaskRow[] | null;
@@ -73,29 +75,51 @@ const createBoardFromSupabaseRows = (
   taskRows: SupabaseTaskRowWithSubTasks[]
 ): BoardState => {
   const board = createInitialBoardState();
+  const sortedRows = [...taskRows].sort((a, b) => {
+    const aCreatedAt = a.created_at ?? '';
+    const bCreatedAt = b.created_at ?? '';
+    return aCreatedAt.localeCompare(bCreatedAt);
+  });
 
-  taskRows.forEach((row) => {
-    const taskId = row.id;
-    const task: Task = {
-      id: taskId,
-      title: row.title ?? '',
-      description: row.description ?? '',
-      status: normalizeTaskStatus(row.status),
-      labels: [],
-      subTasks: (row.sub_tasks ?? []).map((subTask) => ({
-        id: subTask.id,
-        title: subTask.title,
-        isCompleted: Boolean(subTask.is_completed),
-      })),
-      estimatedTime: Number(row.estimated_time ?? 0),
-      totalTrackedTime: Number(row.total_tracked_time ?? 0),
-      isTimerRunning: Boolean(row.is_timer_running),
-      timerStartedAt: row.timer_started_at ?? null,
-      createdAt: row.created_at ?? new Date().toISOString(),
-    };
+  const archivedRows = sortedRows
+    .filter((row) => Boolean(row.is_archived))
+    .sort((a, b) => {
+      const aArchivedAt = a.archived_at ?? a.created_at ?? '';
+      const bArchivedAt = b.archived_at ?? b.created_at ?? '';
+      return bArchivedAt.localeCompare(aArchivedAt);
+    });
 
-    board.tasks[taskId] = task;
+  const activeRows = sortedRows.filter((row) => !Boolean(row.is_archived));
+
+  const createTaskFromRow = (row: SupabaseTaskRowWithSubTasks): Task => ({
+    id: row.id,
+    title: row.title ?? '',
+    description: row.description ?? '',
+    status: normalizeTaskStatus(row.status),
+    labels: [],
+    subTasks: (row.sub_tasks ?? []).map((subTask) => ({
+      id: subTask.id,
+      title: subTask.title,
+      isCompleted: Boolean(subTask.is_completed),
+    })),
+    estimatedTime: Number(row.estimated_time ?? 0),
+    totalTrackedTime: Number(row.total_tracked_time ?? 0),
+    isTimerRunning: Boolean(row.is_timer_running),
+    timerStartedAt: row.timer_started_at ?? null,
+    isArchived: Boolean(row.is_archived),
+    archivedAt: row.archived_at ?? null,
+    createdAt: row.created_at ?? new Date().toISOString(),
+  });
+
+  activeRows.forEach((row) => {
+    const task = createTaskFromRow(row);
+    board.tasks[task.id] = task;
     board.columns[task.status].taskIds.push(task.id);
+  });
+
+  archivedRows.forEach((row) => {
+    const task = createTaskFromRow(row);
+    board.history?.push(task);
   });
 
   return board;
@@ -355,30 +379,23 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
   },
 
   moveToHistory: async (taskId) => {
-    set((state) => {
-      const task = state.board.tasks[taskId];
-      if (!task) return {};
+    const roomCode = get().roomCode;
 
-      const remainingTasks = Object.fromEntries(
-        Object.entries(state.board.tasks).filter(([id]) => id !== taskId)
-      );
+    if (!roomCode || !supabase) {
+      return;
+    }
 
-      const updatedColumns = { ...state.board.columns };
-      Object.values(updatedColumns).forEach((column) => {
-        updatedColumns[column.id] = {
-          ...column,
-          taskIds: column.taskIds.filter((id) => id !== taskId),
-        };
-      });
+    const archivedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('tasks')
+      .update({ is_archived: true, archived_at: archivedAt })
+      .eq('id', taskId);
 
-      return {
-        board: {
-          ...state.board,
-          tasks: remainingTasks,
-          columns: updatedColumns,
-          history: [...(state.board.history ?? []), task],
-        },
-      };
-    });
+    if (error) {
+      console.error('Failed to archive task in Supabase', error);
+      return;
+    }
+
+    await get().fetchBoardData();
   },
 }));
