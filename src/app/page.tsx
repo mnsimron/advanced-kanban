@@ -383,26 +383,28 @@ export default function Home() {
                       </div>
 
                       {/* Kontainer Area List Kartu */}
-                      <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
                         {tasks.length === 0 ? (
                           <div className="border-4 border-dashed border-slate-400 p-8 text-center text-slate-400 font-game text-[10px] mt-4">
                             EMPTY STAGE
                           </div>
                         ) : (
-                          tasks.map((task, index) => (
-                            <Draggable draggableId={task.id} index={index} key={task.id}>
-                              {(draggableProvided) => (
-                                <div
-                                  ref={draggableProvided.innerRef}
-                                  {...draggableProvided.draggableProps}
-                                  {...draggableProvided.dragHandleProps}
-                                  className="mb-4"
-                                >
-                                  <TaskCard task={task} index={index} onEditClick={openEditModal} />
-                                </div>
-                              )}
-                            </Draggable>
-                          ))
+                          <div className="space-y-1">
+                            {tasks.map((task) => (
+                              <Draggable draggableId={task.id} index={tasks.findIndex((item) => item.id === task.id)} key={task.id}>
+                                {(draggableProvided) => (
+                                  <div
+                                    ref={draggableProvided.innerRef}
+                                    {...draggableProvided.draggableProps}
+                                    {...draggableProvided.dragHandleProps}
+                                    className="mb-4 transition-transform duration-200 ease-out"
+                                  >
+                                    <TaskCard task={task} index={tasks.findIndex((item) => item.id === task.id)} onEditClick={openEditModal} />
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                          </div>
                         )}
                         {provided.placeholder}
                       </div>

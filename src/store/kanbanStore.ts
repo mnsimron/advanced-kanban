@@ -175,13 +175,54 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
     const roomCode = get().roomCode;
     const movedTaskId = get().board.columns[sourceCol]?.taskIds?.[sourceIndex];
 
-    if (!roomCode || !movedTaskId || !supabase) {
+    if (!roomCode || !movedTaskId) {
       return;
     }
 
     const status = destCol as Task['status'];
-    await supabase.from('tasks').update({ status }).eq('id', movedTaskId);
-    await get().fetchBoardData();
+
+    set((state) => {
+      const sourceColumn = state.board.columns[sourceCol];
+      const destinationColumn = state.board.columns[destCol];
+
+      if (!sourceColumn || !destinationColumn) {
+        return {};
+      }
+
+      const nextTaskIds = [...sourceColumn.taskIds];
+      const [movedTask] = nextTaskIds.splice(sourceIndex, 1);
+
+      if (!movedTask) {
+        return {};
+      }
+
+      const updatedColumns = { ...state.board.columns };
+      updatedColumns[sourceCol] = { ...sourceColumn, taskIds: nextTaskIds };
+
+      const destinationTaskIds = [...destinationColumn.taskIds];
+      destinationTaskIds.splice(destIndex, 0, movedTask);
+      updatedColumns[destCol] = { ...destinationColumn, taskIds: destinationTaskIds };
+
+      const updatedTasks = { ...state.board.tasks };
+      const task = updatedTasks[movedTask];
+      if (task) {
+        updatedTasks[movedTask] = { ...task, status };
+      }
+
+      return {
+        board: {
+          ...state.board,
+          tasks: updatedTasks,
+          columns: updatedColumns,
+        },
+      };
+    });
+
+    if (!supabase) {
+      return;
+    }
+
+    void supabase.from('tasks').update({ status }).eq('id', movedTaskId);
   },
 
   addTask: async (columnId, title, estimatedTime, subTaskTitles = []) => {
@@ -286,6 +327,27 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
       return;
     }
 
+    set((state) => {
+      const updatedTasks = { ...state.board.tasks };
+      const task = updatedTasks[taskId];
+      if (!task) {
+        return {};
+      }
+
+      const updatedSubTasks = task.subTasks.map((item) =>
+        item.id === subTaskId ? { ...item, isCompleted: !item.isCompleted } : item
+      );
+
+      updatedTasks[taskId] = { ...task, subTasks: updatedSubTasks };
+
+      return {
+        board: {
+          ...state.board,
+          tasks: updatedTasks,
+        },
+      };
+    });
+
     const { error } = await supabase
       .from('sub_tasks')
       .update({ is_completed: !subTask.isCompleted })
@@ -293,10 +355,7 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
 
     if (error) {
       console.error('Failed to toggle sub-task in Supabase', error);
-      return;
     }
-
-    await get().fetchBoardData();
   },
 
   startTimer: async (taskId) => {
@@ -306,6 +365,27 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
       return;
     }
 
+    set((state) => {
+      const updatedTasks = { ...state.board.tasks };
+      const task = updatedTasks[taskId];
+      if (!task) {
+        return {};
+      }
+
+      updatedTasks[taskId] = {
+        ...task,
+        isTimerRunning: true,
+        timerStartedAt: new Date().toISOString(),
+      };
+
+      return {
+        board: {
+          ...state.board,
+          tasks: updatedTasks,
+        },
+      };
+    });
+
     const { error } = await supabase
       .from('tasks')
       .update({ is_timer_running: true, timer_started_at: new Date().toISOString() })
@@ -313,10 +393,7 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
 
     if (error) {
       console.error('Failed to start timer in Supabase', error);
-      return;
     }
-
-    await get().fetchBoardData();
   },
 
   pauseTimer: async (taskId) => {
@@ -333,6 +410,29 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
     }
 
     const nextTrackedTime = task.totalTrackedTime + elapsedSeconds;
+
+    set((state) => {
+      const updatedTasks = { ...state.board.tasks };
+      const currentTask = updatedTasks[taskId];
+      if (!currentTask) {
+        return {};
+      }
+
+      updatedTasks[taskId] = {
+        ...currentTask,
+        totalTrackedTime: nextTrackedTime,
+        isTimerRunning: false,
+        timerStartedAt: null,
+      };
+
+      return {
+        board: {
+          ...state.board,
+          tasks: updatedTasks,
+        },
+      };
+    });
+
     const { error } = await supabase
       .from('tasks')
       .update({
@@ -344,10 +444,7 @@ export const useKanbanStore = create<KanbanStore>()((set, get) => ({
 
     if (error) {
       console.error('Failed to pause timer in Supabase', error);
-      return;
     }
-
-    await get().fetchBoardData();
   },
 
   updateActiveTimers: () => {
