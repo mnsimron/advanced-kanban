@@ -45,8 +45,12 @@ export default function TaskCard({ task, index, onEditClick }: TaskCardProps) {
   const progressPercent = totalSubTasks > 0 ? Math.round((completedSubTasks / totalSubTasks) * 100) : 0;
 
   // Cek apakah waktu pengerjaan melebihi estimasi (Overtime)
-  const totalMinutesTracked = task.totalTrackedTime / 60;
-  const isOvertime = totalMinutesTracked > task.estimatedTime;
+  const estimatedStoryPoints = task.estimatedTime / 60;
+  const trackedHours = task.totalTrackedTime / 3600;
+  const isOvertime = trackedHours > estimatedStoryPoints;
+  const estimatedStoryPointsLabel = Number.isInteger(estimatedStoryPoints)
+    ? estimatedStoryPoints.toString()
+    : estimatedStoryPoints.toFixed(1);
 
   const createdAtLabel = (() => {
     const createdAtDate = new Date(task.createdAt);
@@ -146,7 +150,7 @@ export default function TaskCard({ task, index, onEditClick }: TaskCardProps) {
         {/* Visual Waktu */}
         <div className="flex flex-col">
           <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-            <Clock className="w-3 h-3" /> ESTIMASI: {task.estimatedTime}M
+            <Clock className="w-3 h-3" /> ESTIMATE: {estimatedStoryPointsLabel} SP
           </span>
           <span 
             className={`font-game text-sm mt-0.5 tracking-wider
